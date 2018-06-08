@@ -84,73 +84,53 @@ print(slices1_11.shape)
 #
 # #print(slices1_11[4].shape)
 
-
-
-
 def shdi(data):
-    cat_list = [1, 2, 3, 5, 11, 13, 17, 18, 19]
     results = []
-    counter +=1
+    #counter +=1
     cat_list =[1,2,3,5,11,13,17,18,19]
-    unique, counts = np.unique(slice, return_counts=True)
+    unique, counts = np.unique(data, return_counts=True)
     dict1 = dict(zip(unique, counts))
-        #print(dict1)
     p_dict = {}
     for cat in cat_list:                                        # loop through every category in the list
         if cat in dict1:                                        # if this category is represented in the slice
-            p_dict.update({cat: dict1[cat]})                    # keep only the counts and keys that are in the list and the slice
-            #print(p_dict)
-    cat_sum = sum(p_dict.values())                              # get sum of all pixels containing one of the category values
+            p_dict.update({cat: dict1[cat]})                        # keep only the counts and keys that are in the list and the slice
+    cat_sum = sum(p_dict.values())                               # get sum of all pixels containing one of the category values
     for cat in cat_list:
         if cat in dict1:
-            #prop_list.append(p_dict[cat]*100/cat_sum)
-            #prop_list.append(cat)
-            prop = p_dict[cat]*100/cat_sum
-            shdi = (prop * np.log(prop))
+            prop = (p_dict[cat]/cat_sum)
+            shdi = (prop * math.log10(prop))
             results.append(shdi)
     shdi_fin = sum(results) * (-1)
-    print(shdi_fin)
+    #shdi_arr = np.asarray(shdi_fin)
+    #print(shdi_list)
+    return(shdi_fin)
 
-print(np.apply_along_axis(np.mean, axis=2, arr= slices1_11))
 
+arr_test = np.apply_along_axis(shdi, axis=2, arr= slices1_11)
+print(arr_test)
+print(len(arr_test))
 
 #print(shdi(slices1_11))
 
-
-#
-# counter = 0
-#
-# #def shdi(data): # data = slices of one window size and one image
-# for slice in slices1_11:
-#     results = []
-#     counter +=1
-#     cat_list =[1,2,3,5,11,13,17,18,19]
-#     unique, counts = np.unique(slice, return_counts=True)
-#     dict1 = dict(zip(unique, counts))
-#     #print(dict1)
-#     p_dict = {}
-#     for cat in cat_list:                                        # loop through every category in the list
-#         if cat in dict1:                                        # if this category is represented in the slice
-#             p_dict.update({cat: dict1[cat]})                    # keep only the counts and keys that are in the list and the slice
-#             #print(p_dict)
-#     cat_sum = sum(p_dict.values())                              # get sum of all pixels containing one of the category values
-#     for cat in cat_list:
-#         if cat in dict1:
-#             #prop_list.append(p_dict[cat]*100/cat_sum)
-#             #prop_list.append(cat)
-#             prop = p_dict[cat]*100/cat_sum
-#             shdi = (prop * np.log(prop))
-#             results.append(shdi)
-#     shdi_fin = sum(results) * (-1)
-#     print(shdi_fin)
-# print(counter)
-# out_data = np.ones((1000,1000)) * -99
+#out_data = np.ones((1000,1000)) * -99
+#out_data[5:995, 5:995] = np.asarray(slices1_11)
 
 
+# # Save raster - code from class
+# # 0. Formulate an outputName
+# ras_B12 = root_folder + "dem_slope.tif"
+# # 1. Create a driver with which we write the output
+# drvR = gdal.GetDriverByName('GTiff')
+# # 2. Create the file (here: allthough exactly the same, we go through the syntax)
+# pr1 = ras1.GetProjection()
+# pr2 = ras2.GetProjection()
+# pr3 = ras3.GetProjection()
+# outDS = drvR.Create(ras_B12, 599, 1240, 1)
+# outDS.SetProjection(pr1)
+# outDS.SetGeoTransform(gt_dem) # dont need this ?
+# # 3. Write the array into the newly generated file
+# outDS.GetRasterBand(1).WriteArray(arr_B12, 0, 0)#(array, offset_x, offset_y)
 
-
-
-# apply along axis function
 
 ########################################################################
 print("")
