@@ -42,57 +42,81 @@ def make_slices(data, rows, cols):
     """
     yrange = data.shape[0] - rows + 1
     xrange = data.shape[1] - cols + 1
-    #arr2 = np.zeros(shape= (121, 1))
-    print('Array dimensions:',arr2.shape)
     slices = []
     counter = 0
-    #result_array = np.empty((121, 1), dtype= int)
     for i in range(xrange):
         counter += 1
         for j in range(yrange):
             data_st = data[i:rows+i, j:cols+j]
-            arr1dim = data_st.flatten()
-            slices.append(arr1dim)
-            #print(slices)
-            #result_array = np.append(result_array, [arr1dim])
-            #print(result_array)
-            #arr2dim = np.concatenate([arr1dim])
-            #sl_array = np.concatenate(arr1, arr2)
+            slices.append(data_st)
+    slices_final = np.asarray(slices)
     print('Slices:', counter)
-    slices_arr = np.asarray(slices)
-    return(slices_arr)
-
-
+    return(slices_final)
 
 # #ras 1
 slices1_11 = make_slices(arr1, 11, 11)
-slices1_21 = make_slices(arr1, 21, 21)
-slices1_31 = make_slices(arr1, 31, 31)
-print(slices1_11)
+#slices1_21 = make_slices(arr1, 21, 21)
+#slices1_31 = make_slices(arr1, 31, 31)
+print(slices1_11.shape)
+#print(slices1_11.shape)
 
 # # stack1_11 = slice_list.append(np.dstack(slices1_11))
 # # stack1_21 = slice_list.append(np.dstack(slices1_21))
 # # stack1_31 = slice_list.append(np.dstack(slices1_31))
 #
 # #ras 2
-slices2_11 = make_slices(arr2, 11,11)
-slices2_21 = make_slices(arr2, 21,21)
-slices2_31 = make_slices(arr2, 31,31)
+#slices2_11 = make_slices(arr2, 11,11)
+#slices2_21 = make_slices(arr2, 21,21)
+#slices2_31 = make_slices(arr2, 31,31)
 #
 # # stack2_11 = slice_list.append(np.dstack(slices2_11))
 # # stack2_21 = slice_list.append(np.dstack(slices2_21))
 # # stack2_31 = slice_list.append(np.dstack(slices2_31))
 #
 # #ras 3
-slices3_11 = make_slices(arr3, 11,11)
-slices3_21 = make_slices(arr3, 21,21)
-slices3_31 = make_slices(arr3, 31,31)
+#slices3_11 = make_slices(arr3, 11,11)
+#slices3_21 = make_slices(arr3, 21,21)
+#slices3_31 = make_slices(arr3, 31,31)
 #
 # # stack3_11 = slice_list.append(np.dstack(slices3_11))
 # # stack3_21 = slice_list.append(np.dstack(slices3_21))
 # # stack3_31 = slice_list.append(np.dstack(slices3_31))
 #
 # #print(slices1_11[4].shape)
+
+
+
+
+def shdi(data):
+    cat_list = [1, 2, 3, 5, 11, 13, 17, 18, 19]
+    results = []
+    counter +=1
+    cat_list =[1,2,3,5,11,13,17,18,19]
+    unique, counts = np.unique(slice, return_counts=True)
+    dict1 = dict(zip(unique, counts))
+        #print(dict1)
+    p_dict = {}
+    for cat in cat_list:                                        # loop through every category in the list
+        if cat in dict1:                                        # if this category is represented in the slice
+            p_dict.update({cat: dict1[cat]})                    # keep only the counts and keys that are in the list and the slice
+            #print(p_dict)
+    cat_sum = sum(p_dict.values())                              # get sum of all pixels containing one of the category values
+    for cat in cat_list:
+        if cat in dict1:
+            #prop_list.append(p_dict[cat]*100/cat_sum)
+            #prop_list.append(cat)
+            prop = p_dict[cat]*100/cat_sum
+            shdi = (prop * np.log(prop))
+            results.append(shdi)
+    shdi_fin = sum(results) * (-1)
+    print(shdi_fin)
+
+print(np.apply_along_axis(np.mean, axis=2, arr= slices1_11))
+
+
+#print(shdi(slices1_11))
+
+
 #
 # counter = 0
 #
