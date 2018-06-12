@@ -103,10 +103,7 @@ while feat:
     # Private Land
     coord_cl = coord.Clone()
     coord_cl.Transform(coordTrans_land)
-    x, y = coord_cl.GetX(), coord_cl.GetY()
-    spnt = ogr.Geometry(ogr.wkbPoint)
-    spnt.AddPoint(x, y)
-    PL_lyr.SetSpatialFilter(spnt)
+    PL_lyr.SetSpatialFilter(coord_cl)
     if PL_lyr.GetFeatureCount() > 0:
         private = 1
     else: private = 0
@@ -115,10 +112,7 @@ while feat:
     # Old growth forest
     coord_cl = coord.Clone()
     coord_cl.Transform(coordTrans_ogf)
-    x, y = coord_cl.GetX(), coord_cl.GetY()
-    spnt = ogr.Geometry(ogr.wkbPoint)
-    spnt.AddPoint(x, y)
-    OGF_lyr.SetSpatialFilter(spnt)
+    OGF_lyr.SetSpatialFilter(coord_cl)
     if OGF_lyr.GetFeatureCount() > 0:
         ogf = 1
     else: ogf = 0
@@ -127,6 +121,13 @@ while feat:
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
 print(df)
+
+field_names = list(('ID', 'PrivateLand',  'Old_Growth', 'Elevation', 'Road_Dist'))
+df = pd.DataFrame.from_records(df, columns = field_names)
+df = pd.melt(df, id_vars=['ID'], value_vars=['PrivateLand',  'Old_Growth', 'Elevation', 'Road_Dist'])
+
+#print(df.head())
+#print(df.sort_values(by='ID'))
 
 
 
