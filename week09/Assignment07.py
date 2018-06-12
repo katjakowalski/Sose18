@@ -120,15 +120,14 @@ while feat:
     df.append([ide, private, ogf, value_elev, value_road])
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
-print(df)
+#print(df)
 
 field_names = list(('ID', 'PrivateLand',  'Old_Growth', 'Elevation', 'Road_Dist'))
 df = pd.DataFrame.from_records(df, columns = field_names)
 df = pd.melt(df, id_vars=['ID'], value_vars=['PrivateLand',  'Old_Growth', 'Elevation', 'Road_Dist'])
 
-#print(df.head())
-#print(df.sort_values(by='ID'))
-
+df = df.sort_values(by='ID')
+df.to_csv(path_or_buf= 'panel.csv', index=False)
 
 
 
