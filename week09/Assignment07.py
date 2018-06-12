@@ -5,6 +5,7 @@ print("--------------------------------------------------------")
 print("")
 ########################################################################
 from osgeo import gdal, ogr, osr
+import struct
 import pandas as pd
 import os
 import numpy as np
@@ -46,13 +47,19 @@ elev = gdal.Open('/Users/Katja/Documents/Studium/Sose18/week09/Assignment07_data
 road = gdal.Open('/Users/Katja/Documents/Studium/Sose18/week09/Assignment07_data/DistToRoad.tif')
 
 
-
-pr_ras = elev.GetProjection()               # get projection from raster
-
+## Elevation raster
+pr_elev = elev.GetProjection()               # get projection from raster
 source_SR = pts_lyr.GetSpatialRef()         # get spatial reference from sample layer
 target_SR = osr.SpatialReference()          # create empty spatial reference
-target_SR.ImportFromWkt(pr_ras)             # get spatial reference from projection of raster
-coordTrans = osr.CoordinateTransformation(source_SR, target_SR)     # transformation rule for coordinates from samples to elevation raster
+target_SR.ImportFromWkt(pr_elev)             # get spatial reference from projection of raster
+coordTrans_elev = osr.CoordinateTransformation(source_SR, target_SR)     # transformation rule for coordinates from samples to elevation raster
+
+## Road raster
+pr_road = road.GetProjection()               # get projection from raster
+source_SR2 = pts_lyr.GetSpatialRef()         # get spatial reference from sample layer
+target_SR2 = osr.SpatialReference()          # create empty spatial reference
+target_SR2.ImportFromWkt(pr_road)             # get spatial reference from projection of raster
+coordTrans_road = osr.CoordinateTransformation(source_SR2, target_SR2)     # transformation rule for coordinates from samples to elevation raster
 
 
 feat = pts_lyr.GetNextFeature()
@@ -62,13 +69,18 @@ while feat:
     ide = feat.GetField('ID')                   # get ID
     coord = feat.GetGeometryRef()
     coord_cl = coord.Clone()
-    coord_cl.Transform(coordTrans)          # apply coordinate transformation
-    pr_elev = elev.GetProjection()          # get projection and transformation to calculate absolute raster coordinates
-    gt_elev = elev.GetGeoTransform()
+    coord_cl.Transform(coordTrans_elev)          # apply coordinate transformation
+    gt_elev = elev.GetGeoTransform()             # get projection and transformation to calculate absolute raster coordinates
     x, y = coord_cl.GetX(), coord_cl.GetY()
     px_elev = int((x - gt_elev[0]) / gt_elev[1])
     py_elev = int((y - gt_elev[3]) / gt_elev[5])
-    #readraster
+    rb = elev.GetRasterBand(1)
+    print(rb.DataType)
+    struc_var = rb.ReadRaster(px_elev, py_elev, 1, 1)
+    print(struc_var)
+    val = struct.unpack('H', struc_var)
+    value = val[0]
+
     #coord_cl =
 
     # ROAD
@@ -78,7 +90,7 @@ while feat:
     #if PL_geom.Contains(spnt):
      #   PL = 1
     #else: PL = 0
-    df.append([ide, x,y])
+    df.append([ide, elev])
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
 #print(df)
