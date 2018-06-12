@@ -56,16 +56,22 @@ coordTrans_elev = osr.CoordinateTransformation(source_SR, target_SR)     # trans
 
 ## Road raster
 pr_road = road.GetProjection()               # get projection from raster
-source_SR2 = pts_lyr.GetSpatialRef()         # get spatial reference from sample layer
 target_SR2 = osr.SpatialReference()          # create empty spatial reference
 target_SR2.ImportFromWkt(pr_road)             # get spatial reference from projection of raster
-coordTrans_road = osr.CoordinateTransformation(source_SR2, target_SR2)     # transformation rule for coordinates from samples to elevation raster
+coordTrans_road = osr.CoordinateTransformation(source_SR, target_SR2)     # transformation rule for coordinates from samples to elevation raster
 
+## Private Land
+target_SR3 = PL_lyr.GetSpatialRef()
+coordTrans_land = osr.CoordinateTransformation(source_SR, target_SR3)
+
+## Old growth forest
+target_SR4 = OGF_lyr.GetSpatialRef()
+coordTrans_ogf = osr.CoordinateTransformation(source_SR, target_SR4)
 
 feat = pts_lyr.GetNextFeature()
 df = list()
 while feat:
-    # ELEVATION
+    # Elevation
     ide = feat.GetField('ID')                   # get ID
     coord = feat.GetGeometryRef()
     coord_cl = coord.Clone()
@@ -74,26 +80,43 @@ while feat:
     x, y = coord_cl.GetX(), coord_cl.GetY()
     px_elev = int((x - gt_elev[0]) / gt_elev[1])
     py_elev = int((y - gt_elev[3]) / gt_elev[5])
-    rb = elev.GetRasterBand(1)
-    print(rb.DataType)
-    struc_var = rb.ReadRaster(px_elev, py_elev, 1, 1)
-    print(struc_var)
-    val = struct.unpack('H', struc_var)
-    value = val[0]
+    rb_elev = elev.GetRasterBand(1)
+    #print(rb.DataType)
+    struc_elev = rb_elev.ReadRaster(px_elev, py_elev, 1, 1)
+    #print(struc_var)
+    val_elev = struct.unpack('H', struc_elev)
+    value_elev = val_elev[0]
 
-    #coord_cl =
-
-    # ROAD
-    pr_road = road.GetProjection()
+    # Distance to road
+    coord_cl = coord.Clone()
+    coord_cl.Transform(coordTrans_road)
     gt_road = road.GetGeoTransform()
+    x, y = coord_cl.GetX(), coord_cl.GetY()
+    px_road = int((x - gt_road[0]) / gt_road[1])
+    py_road = int((y - gt_road[3]) / gt_road[5])
+    rb_road = road.GetRasterBand(1)
+    #print(rb_road.DataType)
+    struc_road = rb_road.ReadRaster(px_road, py_road, 1, 1)
+    val_road = struct.unpack('f', struc_road)
+    value_road = val_road[0]
 
-    #if PL_geom.Contains(spnt):
-     #   PL = 1
+    # Private Land
+    coord_cl = coord.Clone()
+    coord_cl.Transform(coordTrans_land)
+    x, y = coord_cl.GetX(), coord_cl.GetY()
+    spnt = ogr.Geometry(ogr.wkbPoint)
+    spnt.AddPoint(x, y)
+    #PL_geom = PL_lyr.geometry().Clone()
+    PL_geom = PL_lyr.OGRGeometry().Clone()
+    if PL_lyr.Contains(spnt):
+        print('yes')
     #else: PL = 0
-    df.append([ide, elev])
+
+    df.append([ide, value_elev, value_road])
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
-#print(df)
+print(df)
+
 
 ########################################################################
 print("")
