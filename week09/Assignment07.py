@@ -43,7 +43,7 @@ PL_lyr = PL.GetLayer()
 OGF_lyr = OGF.GetLayer()
 pts_lyr = pts.GetLayer()
 
-elev = gdal.Open('/Users/Katja/Documents/Studium/Sose18/week09/Assignment07_data/elevation_lambert.tif')
+elev = gdal.Open('/Users/Katja/Documents/Studium/Sose18/week09/Assignment07_data/Elevation.tif')
 road = gdal.Open('/Users/Katja/Documents/Studium/Sose18/week09/Assignment07_data/DistToRoad.tif')
 
 
@@ -72,7 +72,7 @@ feat = pts_lyr.GetNextFeature()
 df = list()
 while feat:
     # Elevation
-    ide = feat.GetField('ID')                   # get ID
+    ide = feat.GetField('Id')                   # get ID
     coord = feat.GetGeometryRef()
     coord_cl = coord.Clone()
     coord_cl.Transform(coordTrans_elev)          # apply coordinate transformation
@@ -106,16 +106,29 @@ while feat:
     x, y = coord_cl.GetX(), coord_cl.GetY()
     spnt = ogr.Geometry(ogr.wkbPoint)
     spnt.AddPoint(x, y)
-    #PL_geom = PL_lyr.geometry().Clone()
-    PL_geom = PL_lyr.OGRGeometry().Clone()
-    if PL_lyr.Contains(spnt):
-        print('yes')
-    #else: PL = 0
+    PL_lyr.SetSpatialFilter(spnt)
+    if PL_lyr.GetFeatureCount() > 0:
+        private = 1
+    else: private = 0
+    PL_lyr.SetSpatialFilter(None)
 
-    df.append([ide, value_elev, value_road])
+    # Old growth forest
+    coord_cl = coord.Clone()
+    coord_cl.Transform(coordTrans_ogf)
+    x, y = coord_cl.GetX(), coord_cl.GetY()
+    spnt = ogr.Geometry(ogr.wkbPoint)
+    spnt.AddPoint(x, y)
+    OGF_lyr.SetSpatialFilter(spnt)
+    if OGF_lyr.GetFeatureCount() > 0:
+        ogf = 1
+    else: ogf = 0
+    OGF_lyr.SetSpatialFilter(None)
+    df.append([ide, private, ogf, value_elev, value_road])
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
 print(df)
+
+
 
 
 ########################################################################
