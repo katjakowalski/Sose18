@@ -15,10 +15,40 @@ import random as rd
 from shapely import wkt
 ########################################################################
 
+###################################################################################################################
+def TransformGeometry(geometry, target_sref):
+    '''Returns cloned geometry, which is transformed to target spatial reference'''
+    geom_sref = geometry.GetSpatialReference()
+    transform = osr.CoordinateTransformation(geom_sref, target_sref)
+    geom_trans = geometry.Clone()
+    geom_trans.Transform(transform)
+    return geom_trans
+
+
+def SpatialReferenceFromRaster(ds):
+    '''Returns SpatialReference from raster dataset'''
+    pr = ds.GetProjection()
+    sr = osr.SpatialReference()
+    sr.ImportFromWkt(pr)
+    return sr
+
+
+def CopySHPDisk(layer, outpath):
+    drvV = ogr.GetDriverByName('ESRI Shapefile')
+    outSHP = drvV.CreateDataSource(outpath)  # outpath
+    lyr = layer  # .GetLayer() #shape
+    sett90LYR = outSHP.CopyLayer(lyr, 'lyr')
+    del lyr, sett90LYR, outSHP
+
+###################################################################################################################
 
 baseFolder = "/Users/Katja/Documents/Studium/Sose18/week10/Assignment08_data/"
+
+
 parcels = ogr.Open(baseFolder + "Parcels.shp", 1)
 parcels_lyr = parcels.GetLayer()
+p_srs = parcels_lyr.GetSpatialRef()
+p_def = parcels_lyr.GetLayerDefn()
 
 roads = ogr.Open(baseFolder + "Roads.shp", 1)
 roads_lyr = roads.GetLayer()
@@ -35,6 +65,12 @@ mary_cs = mary_lyr.GetSpatialRef()
 
 PL = ogr.Open(baseFolder + "PublicLands.shp", 1)
 PL_lyr = PL.GetLayer()
+
+dem = gdal.Open(baseFolder + "DEM_Humboldt.tif")
+gt = dem.GetGeoTransform()
+pr = dem.GetProjection()
+
+sr_raster = SpatialReferenceFromRaster(dem)
 
 
 i = 0
@@ -114,7 +150,7 @@ while feat:
         thp_feat = thp_lyr.GetNextFeature()
     thp_sum = sum(thp_list)                         # sum up all thp features in parcel
     thp_prop = thp_sum/area_parcel
-
+    thp_lyr.SetSpatialFilter(None)
     ######### Group 4 ############
     # Public Lands
     public = 0
@@ -123,8 +159,53 @@ while feat:
         public = 1
     PL_lyr.SetSpatialFilter(None)
 
+#######################################################################################################################
+    # Transform Coordinate System
+    p_geom_trans = TransformGeometry(geom, sr_raster)
+    # Get Coordinates of polygon envelope
+    x_min, x_max, y_min, y_max = p_geom_trans.GetEnvelope()
+
+    # Create dummy shapefile to story features geometry in (necessary for rasterizing)
+    drv_mem = ogr.GetDriverByName('Memory')
+    ds = drv_mem.CreateDataSource("")
+    ds_lyr = ds.CreateLayer("", SpatialReferenceFromRaster(dem), ogr.wkbPolygon)
+    featureDefn = ds_lyr.GetLayerDefn()
+    out_feat = ogr.Feature(featureDefn)
+    out_feat.SetGeometry(p_geom_trans)
+    ds_lyr.CreateFeature(out_feat)
+    out_feat = None
+    # CopySHPDisk(ds_lyr, "tryout.shp") #If you wish to check the shp
+
+    # Create the destination data source
+    x_res = math.ceil((x_max - x_min) / gt[1])
+    y_res = math.ceil((y_max - y_min) / gt[1])
+    target_ds = gdal.GetDriverByName('MEM').Create('', x_res, y_res, gdal.GDT_Byte)
+    target_ds.GetRasterBand(1).SetNoDataValue(-9999)
+    target_ds.SetProjection(pr)
+    target_ds.SetGeoTransform((x_min, gt[1], 0, y_max, 0, gt[5]))
+
+    # Rasterization
+    gdal.RasterizeLayer(target_ds, [1], ds_lyr,
+                        burn_values=[1], options = ['ALL_TOUCHED=TRUE'])  # ['ALL_TOUCHED=TRUE'] command necessary, however does not work yet
+    target_array = target_ds.ReadAsArray()
+    # target_ds = None
+
+    # Convert data from the DEM to the extent of the envelope of the polygon (to array)
+    inv_gt = gdal.InvGeoTransform(gt)
+    offsets_ul = gdal.ApplyGeoTransform(inv_gt, x_min, y_max)
+    off_ul_x, off_ul_y = map(int, offsets_ul)
+    raster_np = np.array(dem.GetRasterBand(1).ReadAsArray(off_ul_x, off_ul_y, x_res, y_res))
+
+    # Calculate the mean of the array with masking
+    test_array = np.ma.masked_where(target_array < 1, target_array)
+    raster_masked = np.ma.masked_array(raster_np, test_array.mask)
+    dem_mean = np.mean(raster_masked)
+
+#######################################################################################################################
+
+
     # ############################################################# #
-    out_df.loc[len(out_df) + 1] = [apn, total_gh, total_od, dist, length_pr, length_lr, 0, public, thp_prop ]  # insert further variables from other groups
+    out_df.loc[len(out_df) + 1] = [apn, total_gh, total_od, dist, length_pr, length_lr, dem_mean, public, thp_prop ]  # insert further variables from other groups
     feat = parcels_lyr.GetNextFeature()
 
 parcels_lyr.ResetReading()
