@@ -99,7 +99,7 @@ while feat:
         rb_ras = ras.GetRasterBand(1)
         #print(rb_ras.DataType)
         struc_ras = rb_ras.ReadRaster(px_ras, py_ras, 1, 1)
-        #print(struc_ras)
+        #print(struc_ras)fwferfer
         if struc_ras is None:
             value_ras = struc_ras
         else:
