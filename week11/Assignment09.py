@@ -78,10 +78,8 @@ coordTrans_ras = osr.CoordinateTransformation(source_SR, target_SR)     # transf
 
 
 feat = pts_lyr.GetNextFeature()
-df = list()
-
 out_array = np.zeros((pts_lyr.GetFeatureCount(),4))
-print(arr_tr)
+df_list = []
 
 while feat:
     #ide = feat.GetField('Id')                   # get ID
@@ -91,28 +89,28 @@ while feat:
     coord_cl.Transform(coordTrans_ras)          # apply coordinate transformation
     #gt_ras = ras1.GetGeoTransform()             # get projection and transformation to calculate absolute raster coordinates
     x, y = coord_cl.GetX(), coord_cl.GetY()
-    for i in file_list:
-        ras = gdal.Open(i)
+    for i in range(len(file_list)):
+        ras = gdal.Open(file_list[i])
         gt_ras = ras.GetGeoTransform()
         px_ras = int((x - gt_ras[0]) / gt_ras[1])
         py_ras = int((y - gt_ras[3]) / gt_ras[5])
         rb_ras = ras.GetRasterBand(1)
         #print(rb_ras.DataType)
         struc_ras = rb_ras.ReadRaster(px_ras, py_ras, 1, 1)
-        #print(struc_ras)fwferfer
+        #print(struc_ras)
         if struc_ras is None:
             value_ras = struc_ras
         else:
             val_ras = struct.unpack('H', struc_ras)
             value_ras = val_ras[0]
-
-            for i in range(len(file_list)):
-                out_array[:, i] = ras[i].ravel()  # ravel() reduces the dimensions of an array
-            out_array
-        #print(value_ras)
+        df_list.append(value_ras)
     feat = pts_lyr.GetNextFeature()
 pts_lyr.ResetReading()
 
+print(len(df_list))
+
+#for i in range(len(file_list)):
+#    out_array[:, i] = rasters[i].ravel()  # ravel() reduces the dimensions of an array
 
 ########################################################################
 print("")
