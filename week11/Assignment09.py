@@ -144,11 +144,11 @@ arr_tr_drop = arr_tr[~mask]                     # mask original array and store 
 
 
 # save dimensions of arrays
-y_dim2 = arr_tr_drop.shape[1]
-x_dim2 = arr_tr_drop.shape[0]
+y_dim2 = arr_tr_drop.shape[0]
+x_dim2 = arr_tr_drop.shape[1]
 
-y_dim3 = 1
-x_dim3 = arr_tr_cl.shape[0]
+y_dim3 = arr_tr_cl.shape[0]
+x_dim3 = 1
 
 # write arrays to disk
 outName = "trainingDS_features_" + str(x_dim2) + "_" + str(y_dim2)+ ".npy"
