@@ -23,8 +23,18 @@ baseFolder = "/Users/Katja/Documents/Studium/Sose18/week12/Assignment10_data/"
 
 rasterPath = glob.glob(os.path.join(baseFolder + "*.tif"))
 
+windowSize = [11,21,31]
 
 
+raster_list = list()
+for i in rasterPath:
+    for window in windowSize:
+        liste = list()
+        liste.append(i)
+        liste.append(window)
+        raster_list.append(liste)
+
+print(raster_list)
 
 # ####################################### FUNCTIONS ########################################################### #
 def calcSHDI(array):
@@ -51,9 +61,9 @@ rasters = glob.glob(os.path.join(baseFolder + "*.tif"))
 
 def workerfunction(job):
     drvR = gdal.GetDriverByName("GTiff")
-    print("Processing raster: ", raster)
     rasterPath = job[0]
     ds = gdal.Open(rasterPath)
+    print("Processing raster: ", rasterPath)
     gt = ds.GetGeoTransform()
     pr = ds.GetProjection()
     cols = ds.RasterXSize
@@ -92,7 +102,7 @@ def workerfunction(job):
     out_array = np.zeros((rows, cols), dtype=float)
     out_array[startRow:endRow, startCol:endCol] = SHDI
     # write to output
-    outname = job
+    outname = job[0]
     outname = outname.replace(".tif", "_SHDI_"+str(rad)+".tif")
     SHDI_out = drvR.Create(outname, cols, rows, 1, gdal.GDT_Float32)
     SHDI_out.SetProjection(pr)
@@ -100,7 +110,7 @@ def workerfunction(job):
     SHDI_out.GetRasterBand(1).WriteArray(out_array, 0, 0)
 
 
-Parallel(n_jobs=3)(delayed(workerfunction)(i) for i in rasterPath)
+Parallel(n_jobs=3)(delayed(workerfunction)(i) for i in raster_list)
 # set ending time ############################################################
 print("")
 endtime = time.strftime("%H:%M:%S", time.localtime())
