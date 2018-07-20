@@ -58,26 +58,22 @@ def corner_coordinates(file_list):
 
 # get all files in subfolders of data
 root_folder = "/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task01_data/"
-file_list = list()
+file_list = []
 for root, dirs, files in os.walk(root_folder, topdown=False):
     for name in files:
         file_list.append(os.path.join(root ,name))
 
-# create 4 lists with all raster files of respective tile
+# create list with all raster files (tiles)
 tile_1 = [i for i in file_list if '38999' in i]
 tile_2 = [i for i in file_list if '39999' in i]
 tile_3 = [i for i in file_list if '40999' in i]
 tile_4 = [i for i in file_list if '41999' in i]
-
-tile_1 = [i for i in tile_1 if '.hdr' not in i]
-tile_2 = [i for i in tile_2 if '.hdr' not in i]
-tile_3 = [i for i in tile_3 if '.hdr' not in i]
-tile_4 = [i for i in tile_4 if '.hdr' not in i]
-
-
+tile_list = tile_1 + tile_2 + tile_3 + tile_4
+tile_list = [i for i in tile_list if '.hdr' not in i]
+print(len(tile_list))
 # get corner coordinates = sample boundary
-x_min, x_max, y_min, y_max = corner_coordinates(tile_1)
-print(x_min, x_max, y_min, y_max)
+x_min, x_max, y_min, y_max = corner_coordinates(tile_list)
+
 
 # coordinate transformation
 ras_veg = gdal.Open(root_folder + '/2000_VCF/20S_070W.tif')
@@ -99,14 +95,34 @@ count_list2 = []
 count_list3 = []
 count_list4 = []
 count_list5 = []
+count_all = []
 df = pd.DataFrame(columns=['ID', 'X', 'Y'])                         # set up pandas dataframe to store data
 
-while len(count_list1) < 1 or len(count_list2) < 1 or len(count_list3) < 1 or len(count_list4) < 1 or len(count_list5) < 1:
+while len(count_all) < 5:
     x1 = rd.uniform(x_min, x_max)                                   # sample random value in x range
     y1 = rd.uniform(y_min, y_max)                                   # sample random value in y range
-    ras = gdal.Open(root_folder + '/2000_VCF/20S_070W.tif')         # open vegetation raster
     point = ogr.Geometry(ogr.wkbPoint)                              # create point geometry from coordinates
     point.AddPoint(x1, y1)
+    # extract values from tiles
+    count = []
+    for i in tile_list:
+        print(i)
+        tile = gdal.Open(i)
+        gt_tile = tile.GetGeoTransform()
+        px_tile = int((x1 - gt_tile[0]) / gt_tile[1])
+        py_tile = int((y1 - gt_tile[3]) / gt_tile[5])
+        for band in range(tile.RasterCount):
+            band += 1
+            rb_tile = tile.GetRasterBand(band)
+            struc_tile = rb_tile.ReadRaster(px_tile, py_tile, 1, 1)
+            if struc_tile is None:
+                val_tile = struc_tile
+            else:
+                val_tile = struct.unpack('h', struc_tile)
+                val_tile = val_tile[0]
+
+    # extract values from vegetation raster
+    ras = gdal.Open(root_folder + '/2000_VCF/20S_070W.tif')  # open vegetation raster
     coord_cl = point.Clone()                                        # clone sample geometry
     coord_cl.Transform(coordTrans)                                  # apply coordinate transformation
     x, y = coord_cl.GetX(), coord_cl.GetY()                         # get x and y coordinates of transformed sample point
@@ -127,22 +143,27 @@ while len(count_list1) < 1 or len(count_list2) < 1 or len(count_list3) < 1 or le
         count1 = len(count_list1)
         df.loc[len(df) + 1] = [count1, x, y]
         count_list1.append(1)
+        count_all.append(1)
     elif val <= 40 and len(count_list2) < 1:
         count2 = len(count_list2)
         df.loc[len(df) + 1] = [count2, x, y]
         count_list2.append(1)
+        count_all.append(1)
     elif val <= 60 and len(count_list3) < 1:
         count3 = len(count_list3)
         df.loc[len(df) + 1] = [count3, x, y]
         count_list3.append(1)
+        count_all.append(1)
     elif val <= 80 and len(count_list4) < 1:
         count4 = len(count_list4)
         df.loc[len(df) + 1] = [count4, x, y]
         count_list4.append(1)
+        count_all.append(1)
     elif val <= 100 and len(count_list5) < 1:
         count5 = len(count_list5)
         df.loc[len(df) + 1] = [count5, x, y]
         count_list5.append(1)
+        count_all.append(1)
 
 #####################################################################################
 # set ending time ###################################################################
