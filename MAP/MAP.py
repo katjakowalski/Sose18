@@ -56,6 +56,29 @@ def list_files(root_folder):
             file_list.append(os.path.join(root ,name))
     return(file_list)
 
+def return_raster_bands(x1, y1, tile_list):
+    for i in tile_list:                                             # loop through all tiles
+        tile = gdal.Open(i)
+        #print('bands: ', tile.RasterCount)
+        gt_tile = tile.GetGeoTransform()                            # get information from tile
+        px_tile = int((x1 - gt_tile[0]) / gt_tile[1])               # calculate absolute raster coordinates of sample
+        py_tile = int((y1 - gt_tile[3]) / gt_tile[5])
+        if px_tile < 1000 and px_tile >= 0 and py_tile < 1000 and py_tile >= 0:
+            #print(gt_tile)
+            #print(px_tile, py_tile)
+            data = tile.ReadAsArray()                               # get array from raster
+            if tile.RasterCount == 1:                               # extract values from raster depending on number of bands in raster
+                val_band = data[py_tile, px_tile]                   # extract raster value from single band
+                #print('point in tile', i)
+                dat_list.append([point_id, os.path.basename(os.path.normpath(i)),1, val_band])
+            else:
+                for x in range(tile.RasterCount):                   # extract raster value from each band
+                    val_bands = data[x,py_tile, px_tile]
+                    dat_list.append([point_id, os.path.basename(os.path.normpath(i)), x, val_bands])
+                    #print('rasterbands:',x ,'value: ', val_bands)
+    return(dat_list)
+
+
 
 ######################################################
 
@@ -72,6 +95,7 @@ tile_4 = [i for i in file_list if '41999' in i]
 tile_list = tile_1 + tile_2 + tile_3 + tile_4
 tile_list = [i for i in tile_list if '.hdr' not in i]
 
+print(tile_list)
 # get corner coordinates = sample boundary
 x_min, x_max, y_min, y_max = corner_coordinates(tile_list)
 
@@ -100,7 +124,7 @@ layer = data_source.CreateLayer("sample_pts", srs, ogr.wkbPoint)
 
 
 # create fields
-field0 = ogr.FieldDefn("ID", ogr.OFTInteger)
+field0 = ogr.FieldDefn("UID", ogr.OFTInteger)
 layer.CreateField(field0)
 
 field1 = ogr.FieldDefn("X", ogr.OFTReal)
@@ -109,18 +133,21 @@ layer.CreateField(field1)
 field2 = ogr.FieldDefn("Y", ogr.OFTReal)
 layer.CreateField(field2)
 
+field3 = ogr.FieldDefn("VCF", ogr.OFTInteger)
+layer.CreateField(field3)
+
 defn = layer.GetLayerDefn()
 
-count_list1 = []
-count_list2 = []
-count_list3 = []
-count_list4 = []
-count_list5 = []
+count_list1 = 0
+count_list2 = 0
+count_list3 = 0
+count_list4 = 0
+count_list5 = 0
 count_all = []
 dat_list = []
 df = pd.DataFrame(columns=['ID', 'X', 'Y', 'val_veg'])                         # set up pandas dataframe to store data
 point_id = 0
-while len(count_list1) < 100 or len(count_list2) < 100 or len(count_list3) < 100 or len(count_list4) < 100 or len(count_list5) < 100:
+while count_list1 < 100 or count_list2 < 100 or count_list3 < 100 or count_list4 < 100 or count_list5 < 100:
     x1 = rd.uniform(x_min, x_max)                                   # sample random value in x range
     y1 = rd.uniform(y_min, y_max)                                   # sample random value in y range
     point = ogr.Geometry(ogr.wkbPoint)                              # create empty geometry and then add point geometry from coordinates
@@ -132,6 +159,7 @@ while len(count_list1) < 100 or len(count_list2) < 100 or len(count_list3) < 100
     coord_cl = point.Clone()  # clone sample geometry
     coord_cl.Transform(coordTrans)  # apply coordinate transformation
     x, y = coord_cl.GetX(), coord_cl.GetY()  # get x and y coordinates of transformed sample point
+
     #calculate absolute raster coordinates:
     px_ras = int((x - gt_ras[0]) / gt_ras[1])
     py_ras = int((y - gt_ras[3]) / gt_ras[5])
@@ -144,42 +172,27 @@ while len(count_list1) < 100 or len(count_list2) < 100 or len(count_list3) < 100
         val_ras = struct.unpack('b', struc_ras)
         val_veg = val_ras[0]
 
-    if val_veg <= 20 and len(count_list1) < 100:
+    if val_veg <= 20 and count_list1 < 100:
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
-        count_list1.append(1)
-    elif val_veg <= 40 and len(count_list2) < 100:
+        count_list1 += 1
+        dat_list1 = return_raster_bands(x1,y1,tile_list)
+    elif val_veg <= 40 and count_list2 < 100:
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
-        count_list2.append(1)
-    elif val_veg <= 60 and len(count_list3) < 100:
+        count_list2 += 1
+        dat_list2 = return_raster_bands(x1, y1, tile_list)
+    elif val_veg <= 60 and count_list3 < 100:
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
-        count_list3.append(1)
-    elif val_veg <= 80 and len(count_list4) < 100:
+        count_list3 += 1
+        dat_list3 = return_raster_bands(x1, y1, tile_list)
+    elif val_veg <= 80 and count_list4 < 100:
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
-        count_list4.append(1)
-    elif val_veg <= 100 and len(count_list5) < 100:
+        count_list4 += 1
+        dat_list4 = return_raster_bands(x1, y1, tile_list)
+    elif val_veg <= 100 and count_list5 < 100:
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
-        count_list5.append(1)
-
-### extract from tiles
-    for i in tile_list:                                             # loop through all tiles
-        tile = gdal.Open(i)
-        #print('bands: ', tile.RasterCount)
-        gt_tile = tile.GetGeoTransform()                            # get information from tile
-        px_tile = int((x1 - gt_tile[0]) / gt_tile[1])               # calculate absolute raster coordinates of sample
-        py_tile = int((y1 - gt_tile[3]) / gt_tile[5])
-        if px_tile < 1000 and px_tile >= 0 and py_tile < 1000 and py_tile >= 0:
-            #print(gt_tile)
-            #print(px_tile, py_tile)
-            data = tile.ReadAsArray()                               # get array from raster
-            if tile.RasterCount == 1:                               # extract values from raster depending on number of bands in raster
-                val_band = data[py_tile, px_tile]                   # extract raster value from single band
-                #print('point in tile', i)
-                dat_list.append([point_id, os.path.basename(os.path.normpath(i)),1, val_band])
-            else:
-                for x in range(tile.RasterCount):                   # extract raster value from each band
-                    val_bands = data[x,py_tile, px_tile]
-                    dat_list.append([point_id, os.path.basename(os.path.normpath(i)), x, val_bands])
-                    #print('rasterbands:',x ,'value: ', val_bands)
+        count_list5 += 1
+        dat_list5 = return_raster_bands(x1, y1, tile_list)
+    else: print("too many points")
 
 
     #print('veg.value: ', val_veg)
@@ -188,14 +201,16 @@ while len(count_list1) < 100 or len(count_list2) < 100 or len(count_list3) < 100
     pt.AddPoint(x1,y1)                # use x and y of transformed sample coordinates
     feat = ogr.Feature(defn)
     feat.SetGeometry(pt)
-    feat.SetField('ID', point_id)
+    feat.SetField('UID', point_id)
     feat.SetField('X', x)
     feat.SetField('Y', y)
+    feat.SetField('VCF', val_veg)
     layer.CreateFeature(feat)
 
 feat = None
 data_source = None
 
+dat_list = dat_list1 + dat_list2 + dat_list3 + dat_list4 + dat_list5
 
 #print(dat_list)
 field_names = list(('id', 'image', 'band','val'))
