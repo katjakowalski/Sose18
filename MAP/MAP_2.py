@@ -9,6 +9,7 @@ print("")
 # import additional packages
 from osgeo import gdal, ogr, osr
 import pandas as pd
+from shapely import wkt
 import numpy as np
 import math
 from joblib import Parallel, delayed
@@ -40,19 +41,45 @@ source_SR = dams_lyr.GetSpatialRef()
 target_SR = countries_lyr.GetSpatialRef()
 coordTrans= osr.CoordinateTransformation(source_SR, target_SR)
 
+# create list with all country names
+co_list = set()
+for country in countries_lyr:
+    co_name = country.GetField('NAME_0')
+    co_list.add(co_name)                            # adds only country names which are not in list already
+co_list = list(co_list)
+print(co_list)
+
+area_km2 = []
+#for feature in co_list:
+    #print(feature)
+countries_lyr.SetAttributeFilter("NAME_0 = 'Denmark'")
+    #feat = countries_lyr.GetNextFeature()
+area_list = []
+for feat in countries_lyr:
+    area = feat.GetField('area_km2')
+    co = feat.GetField('NAME_0')
+    area_list.append(area)
+        #feat = countries_lyr.GetNextFeature()
+    #print(area_list)
+sum_area = sum(area_list)
+print(sum_area)
+    #area_km2.append([country, sum_area])
+countries_lyr.SetAttributeFilter(None)
+
+#print(area_km2)
+
 # loop through dams
 dam_feature = dams_lyr.GetNextFeature()
 df = []
 while dam_feature:
     coord = dam_feature.GetGeometryRef()
     coord_cl = coord.Clone()
-    coord_cl.Transform(coordTrans)                  # transform coordinate to crs of country layer
+    coord_cl.Transform(coordTrans)                      # transform coordinate to crs of country layer
     countries_lyr.SetSpatialFilter(coord_cl)            # set spatial filter to select country
 
     for country in countries_lyr:                       # extract country for dam
         country_name = country.GetField('NAME_0')
     countries = countries_lyr.SetAttributeFilter("NAME_0 = country_name")
-
     df.append([dam_feature.GetField('DAM_NAME'),        # transfer to nested list
                dam_feature.GetField('YEAR'),
                dam_feature.GetField('AREA_SKM'),
@@ -60,11 +87,18 @@ while dam_feature:
                dam_feature.GetField('ELEV_MASL'),
                dam_feature.GetField('CATCH_SKM'),
                country_name])
-
     countries_lyr.SetSpatialFilter(None)                # remove spatial filter
+    #x, y = coord_cl.GetX(), coord_cl.GetY()
+    #spnt = ogr.Geometry(ogr.wkbPoint)
+    #spnt.AddPoint(x, y)
+    #coord_wkt = wkt.loads(str(spnt))
+    #print(roads_lyr.boundary.distance(coord_wkt))
+
     dam_feature = dams_lyr.GetNextFeature()
 dams_lyr.ResetReading()
 
+#for country in country_list:
+#    roads_lyr.SetSpatialFilter(country)
 # convert list to pandas dataframe
 field_names = list(('name', 'year',  'area_skm', 'depth_m', 'elev_masl', 'catch_skm', 'country'))
 df_pandas = pd.DataFrame.from_records(df, columns = field_names)
@@ -129,14 +163,16 @@ df_final.columns = ['country','nr_dams','yr_old','name_old','yr_young','name_you
                     'av_reserv_km2','max_reserv_km2','Name_max_depth','av_depth_reserv_m',
                     'max_depth_reserv_m','Name_max_reserv','max_catch_km2','Name_max_catch' ]
 
+# some dams where built in the same year, however, here I just select the first in alphabetical order and drop the other(s)
+df_final.sort_values(by=['country', 'name_old', 'name_young', 'Name_max_depth', 'Name_max_reserv', 'Name_max_catch'])
+df_final = df_final.drop_duplicates(subset=['country'], keep = 'first')
+
 # save csv file
 df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
-
-
-
-
 ### ROADS
+
+
 
 
 #####################################################################################
