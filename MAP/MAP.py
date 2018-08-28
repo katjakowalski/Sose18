@@ -56,28 +56,44 @@ def list_files(root_folder):
             file_list.append(os.path.join(root ,name))
     return(file_list)
 
+
 def return_raster_bands(x1, y1, tile_list):
+    dat_list = []
+   # arr_list = []
     for i in tile_list:                                             # loop through all tiles
         tile = gdal.Open(i)
         #print('bands: ', tile.RasterCount)
         gt_tile = tile.GetGeoTransform()                            # get information from tile
         px_tile = int((x1 - gt_tile[0]) / gt_tile[1])               # calculate absolute raster coordinates of sample
         py_tile = int((y1 - gt_tile[3]) / gt_tile[5])
-        if px_tile < 1000 and px_tile >= 0 and py_tile < 1000 and py_tile >= 0:
+        if px_tile < 1000 and px_tile >= 0 and py_tile < 1000 and py_tile >= 0:     # if pt lies within tile
             #print(gt_tile)
             #print(px_tile, py_tile)
             data = tile.ReadAsArray()                               # get array from raster
             if tile.RasterCount == 1:                               # extract values from raster depending on number of bands in raster
                 val_band = data[py_tile, px_tile]                   # extract raster value from single band
                 #print('point in tile', i)
-                dat_list.append([point_id, os.path.basename(os.path.normpath(i)),1, val_band])
+                dat_list.append(val_band)                          # to include id, filename, band: [point_id, os.path.basename(os.path.normpath(i)),1,
+                #pt_list.append(point_id)
             else:
                 for x in range(tile.RasterCount):                   # extract raster value from each band
                     val_bands = data[x,py_tile, px_tile]
-                    dat_list.append([point_id, os.path.basename(os.path.normpath(i)), x, val_bands])
+                    dat_list.append(val_bands)                      # to include id, filename, band: [point_id, os.path.basename(os.path.normpath(i)), x,
+                    #pt_list.append(point_id)
                     #print('rasterbands:',x ,'value: ', val_bands)
     return(dat_list)
 
+def fill_shapefile(x, y):
+    '''fills shapefile with points (x,y), shapefile and fields have to be created before'''
+    pt = ogr.Geometry(ogr.wkbPoint)
+    pt.AddPoint(x,y)                # use x and y of transformed sample coordinates
+    feat = ogr.Feature(defn)
+    feat.SetGeometry(pt)
+    feat.SetField('UID', point_id)
+    feat.SetField('VCF', val_veg)
+    layer.CreateFeature(feat)
+    feat = None
+    data_source = None
 
 
 ######################################################
@@ -117,34 +133,31 @@ gt_ras = ras_veg.GetGeoTransform()                                  # get inform
 
 # create shapefile and layer
 driver = ogr.GetDriverByName('ESRI Shapefile')
-data_source = driver.CreateDataSource('sample_pts.shp')
+data_source = driver.CreateDataSource('Kowalski_Katja_MAP-task01_randomPoints.shp')
 srs = osr.SpatialReference()
 srs.ImportFromEPSG(102033)
-layer = data_source.CreateLayer("sample_pts", srs, ogr.wkbPoint)
-
+layer = data_source.CreateLayer("Kowalski_Katja_MAP-task01_randomPoints", srs, ogr.wkbPoint)
 
 # create fields
 field0 = ogr.FieldDefn("UID", ogr.OFTInteger)
 layer.CreateField(field0)
-
-field1 = ogr.FieldDefn("X", ogr.OFTReal)
-layer.CreateField(field1)
-
-field2 = ogr.FieldDefn("Y", ogr.OFTReal)
-layer.CreateField(field2)
 
 field3 = ogr.FieldDefn("VCF", ogr.OFTInteger)
 layer.CreateField(field3)
 
 defn = layer.GetLayerDefn()
 
+# create one list per sample class
 count_list1 = 0
 count_list2 = 0
 count_list3 = 0
 count_list4 = 0
 count_list5 = 0
-count_all = []
-dat_list = []
+
+#count_all = []
+pt_list = []
+arr_list_final = []
+
 df = pd.DataFrame(columns=['ID', 'X', 'Y', 'val_veg'])                         # set up pandas dataframe to store data
 point_id = 0
 while count_list1 < 100 or count_list2 < 100 or count_list3 < 100 or count_list4 < 100 or count_list5 < 100:
@@ -152,8 +165,6 @@ while count_list1 < 100 or count_list2 < 100 or count_list3 < 100 or count_list4
     y1 = rd.uniform(y_min, y_max)                                   # sample random value in y range
     point = ogr.Geometry(ogr.wkbPoint)                              # create empty geometry and then add point geometry from coordinates
     point.AddPoint(x1, y1)
-    point_id += 1
-    #print('sample: ', point)
 
     # extract values from vegetation raster
     coord_cl = point.Clone()  # clone sample geometry
@@ -172,58 +183,64 @@ while count_list1 < 100 or count_list2 < 100 or count_list3 < 100 or count_list4
         val_ras = struct.unpack('b', struc_ras)
         val_veg = val_ras[0]
 
-    if val_veg <= 20 and count_list1 < 100:
+    if 0 <= val_veg <= 20 and count_list1 < 100:
+        point_id += 1
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
         count_list1 += 1
-        dat_list1 = return_raster_bands(x1,y1,tile_list)
-    elif val_veg <= 40 and count_list2 < 100:
+        arr_list1 = return_raster_bands(x1,y1,tile_list)
+        arr_list_final.append(arr_list1)
+        fill_shapefile(x1,y1)
+        pt_list.append(val_veg)
+
+    elif 21 <= val_veg <= 40 and count_list2 < 100:
+        point_id += 1
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
         count_list2 += 1
-        dat_list2 = return_raster_bands(x1, y1, tile_list)
-    elif val_veg <= 60 and count_list3 < 100:
+        arr_list2 = return_raster_bands(x1, y1, tile_list)
+        arr_list_final.append(arr_list2)
+        fill_shapefile(x1, y1)
+        pt_list.append(val_veg)
+
+    elif 41 <= val_veg <= 60 and count_list3 < 100:
+        point_id += 1
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
         count_list3 += 1
-        dat_list3 = return_raster_bands(x1, y1, tile_list)
-    elif val_veg <= 80 and count_list4 < 100:
+        arr_list3 = return_raster_bands(x1, y1, tile_list)
+        arr_list_final.append(arr_list3)
+        fill_shapefile(x1, y1)
+        pt_list.append(val_veg)
+
+    elif 61 <= val_veg <= 80 and count_list4 < 100:
+        point_id += 1
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
         count_list4 += 1
-        dat_list4 = return_raster_bands(x1, y1, tile_list)
-    elif val_veg <= 100 and count_list5 < 100:
+        arr_list4 = return_raster_bands(x1, y1, tile_list)
+        arr_list_final.append(arr_list4)
+        fill_shapefile(x1, y1)
+        pt_list.append(val_veg)
+
+    elif 81 <= val_veg <= 100 and count_list5 < 100:
+        point_id += 1
         df.loc[len(df) + 1] = [point_id, x, y, val_veg]
         count_list5 += 1
-        dat_list5 = return_raster_bands(x1, y1, tile_list)
-    else: print("too many points")
+        arr_list5 = return_raster_bands(x1, y1, tile_list)
+        arr_list_final.append(arr_list5)
+        fill_shapefile(x1, y1)
+        pt_list.append(val_veg)
+
+    #print('0-20: ', count_list1, '/21-40: ', count_list2, '/41-60: ', count_list3, '/61-80: ', count_list4, '/81-100: ', count_list5 )
 
 
-    #print('veg.value: ', val_veg)
+# create array from list of lists
+arr_tr = np.asarray(arr_list_final)                   # create array of shape 68 columns (= bands) x 500 rows (=samples)
+arr_tr_cl = np.asarray(pt_list)                       # create array of shape 1 column x 500 rows with VCF values
 
-    pt = ogr.Geometry(ogr.wkbPoint)
-    pt.AddPoint(x1,y1)                # use x and y of transformed sample coordinates
-    feat = ogr.Feature(defn)
-    feat.SetGeometry(pt)
-    feat.SetField('UID', point_id)
-    feat.SetField('X', x)
-    feat.SetField('Y', y)
-    feat.SetField('VCF', val_veg)
-    layer.CreateFeature(feat)
+print(arr_tr.shape)
+print(arr_tr_cl.shape)
 
-feat = None
-data_source = None
-
-dat_list = dat_list1 + dat_list2 + dat_list3 + dat_list4 + dat_list5
-
-#print(dat_list)
-field_names = list(('id', 'image', 'band','val'))
-df2 = pd.DataFrame.from_records(dat_list, columns = field_names)
-print(df.shape[0])
-print(df2.head())
-
-
-#arr_tr = np.asarray(dat_list)                   # create array of shape 4 columns x 1000 rows
-#arr_tr_cl = np.asarray(pt_list)                 # create array of shape 1 column x 1000 rows
-
-
-
+# write arrays to disk
+np.save("Kowalski_Katja_MAP-task01_np-array_x-values.npy", arr_tr)
+np.save("Kowalski_Katja_MAP-task01_np-array_y-values.npy", arr_tr_cl)
 
 #####################################################################################
 # set ending time ###################################################################
