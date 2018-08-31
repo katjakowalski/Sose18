@@ -26,8 +26,9 @@ from functools import reduce
 from decimal import Decimal
 import sys
 import os
+from Tools import dissolve_polygons
 #####################################################################################
-print('hello')
+
 root_folder = "/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task02_data/"
 
 driver = ogr.GetDriverByName("ESRI Shapefile")
@@ -64,66 +65,26 @@ source_SR = countries_lyr.GetSpatialRef()
 target_SR = roads_lyr.GetSpatialRef()
 coordTrans_roads = osr.CoordinateTransformation(source_SR, target_SR)
 
-# create list with all country names
-co_list = set()
-for country in countries_lyr:
-    co_name = country.GetField('NAME_0')
-    co_list.add(co_name)                            # adds only country names which are not in list already
-co_list = list(co_list)
+dissolve_polygons(root_folder, '/countries_3035.shp', '/countries_3035_diss.shp')
+co_shp = driver.Open(root_folder + '/countries_3035_diss.shp',1)
+countries_3035_diss = co_shp.GetLayer()
 
-print('country list ready')
-area_final = []
-
-for i in co_list:                                                   # loop through each country in list
-    area_list = []
-    counter = 0
-    countries_lyr.SetAttributeFilter("NAME_0 = '"+str(i)+"'")       # set attribute filter on respective country
-    co_feat = countries_lyr.GetNextFeature()
-    while co_feat:                                                  # loop through all features of country i
-        area = co_feat.GetField('area_km2')                         # get the area to calculate overall country area
-        area_list.append(area)
-        co_feat = countries_lyr.GetNextFeature()
-    area_final.append([i, round(sum(area_list),2)])
-countries_lyr.SetAttributeFilter(None)
-print('country area ready')
-
-# working with roads and countries in epsg 3035
-length_list = []
-nr_list = []
-country_feat = countries_3035.GetNextFeature()
-while country_feat:
-    #counter_c += 1
-    #print(counter_c)
-    co_geom = country_feat.GetGeometryRef()
-    i = country_feat.GetField('NAME_0')
-    roads_3035.SetSpatialFilter(co_geom)
+# get area for each polygon
+area_roads_final = []
+for o in countries_3035_diss:
+    country_roads = []
+    geom_o = o.GetGeometryRef()
+    name = o.GetField('state')
+    area = geom_o.GetArea()
+    roads_3035.SetSpatialFilter(geom_o)
     fc = roads_3035.GetFeatureCount()
-    nr_list.append([i, fc])
-    if fc > 0:
+    road_feat = roads_3035.GetNextFeature()
+    while road_feat:
+        length = road_feat.GetField('LENGTH_KM')
+        country_roads.append(length)
         road_feat = roads_3035.GetNextFeature()
-        while road_feat:
-            length = road_feat.GetField('LENGTH_KM')
-            length_list.append([i,length])
-            road_feat = roads_3035.GetNextFeature()
-    else: print('no roads in', i)
-    #print('country', i)
+    area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])
     roads_3035.SetSpatialFilter(None)
-    country_feat = countries_3035.GetNextFeature()
-
-print('while loop roads done')
-
-field_names_nr = list(('country', 'nr_roads'))
-df_nr = pd.DataFrame.from_records(nr_list, columns= field_names_nr)
-print(df_nr.head)
-field_names_len = list(('country', 'length_km'))
-df_len = pd.DataFrame.from_records(length_list, columns = field_names_len)
-
-nr_roads = df_nr.groupby(['country'], as_index=False)['country'].sum([]).reset_index()
-len_roads = df_len.groupby(['country'], as_index=False)['country'].sum([]).reset_index()
-
-df_roads = nr_roads.merge(len_roads, how='outer', on='country')
-
-df_roads.to_csv(path_or_buf= 'df_roads.csv', index=False)
 
 # loop through dams
 dam_feature = dams_lyr.GetNextFeature()
@@ -156,8 +117,8 @@ field_names = list(('name', 'year',  'area_skm', 'depth_m', 'elev_masl', 'catch_
 df_pandas = pd.DataFrame.from_records(df, columns = field_names)
 
 # group dataframe and extract information
-## 2. area of the country in km2
-area_km2 = pd.DataFrame.from_records(area_final, columns= ['country','area_km2'])
+## area of the country in km2 //  Kilometers of road per country // Number of roads
+area_km2 = pd.DataFrame.from_records(area_roads_final, columns= ['country','area_km2', 'nr_roads', 'roads_km'])
 
 ## 1. number of damns per country
 nr_dams = df_pandas.groupby(['country'], as_index=False)['country'].agg(['count'])
@@ -229,6 +190,10 @@ df_final = df_final.drop_duplicates(subset=['country'], keep = 'first')
 df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
 ########################################################################################################################
+
+for sth in countries_3035_diss:
+    co_geom = sth.GetGeometryRef()
+    minx, maxx, miny, maxy = co_geom.GetExtent()
 
 ## 2. & 3. mean and maximum distance to road in km
 # calculate raster file with distances to roads for entire area
