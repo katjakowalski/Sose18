@@ -90,8 +90,8 @@ print('country area ready')
 # working with roads and countries in epsg 3035
 length_list = []
 nr_list = []
-#country_feat = countries_3035.GetNextFeature()
-for country_feat in countries_3035:
+country_feat = countries_3035.GetNextFeature()
+while country_feat:
     #counter_c += 1
     #print(counter_c)
     co_geom = country_feat.GetGeometryRef()
@@ -105,9 +105,10 @@ for country_feat in countries_3035:
             length = road_feat.GetField('LENGTH_KM')
             length_list.append([i,length])
             road_feat = roads_3035.GetNextFeature()
-    #else: print('no roads in', i)
+    else: print('no roads in', i)
     #print('country', i)
     roads_3035.SetSpatialFilter(None)
+    country_feat = countries_3035.GetNextFeature()
 
 print('while loop roads done')
 
