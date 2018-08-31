@@ -54,7 +54,6 @@ roads_3035 = ro.GetLayer()
 # driver = ogr.GetDriverByName("ESRI Shapefile")
 co = driver.Open(root_folder + '/countries_3035.shp',0)
 countries_3035 = co.GetLayer()
-print('shapefiles loaded')
 
 # coordinate transformation
 source_SR = dams_lyr.GetSpatialRef()
@@ -65,25 +64,32 @@ source_SR = countries_lyr.GetSpatialRef()
 target_SR = roads_lyr.GetSpatialRef()
 coordTrans_roads = osr.CoordinateTransformation(source_SR, target_SR)
 
-dissolve_polygons(root_folder, '/countries_3035.shp', '/countries_3035_diss.shp')
+#dissolve_polygons(root_folder, '/countries_3035.shp', '/countries_3035_diss.shp')
 co_shp = driver.Open(root_folder + '/countries_3035_diss.shp',1)
 countries_3035_diss = co_shp.GetLayer()
 
-# get area for each polygon
+envelopes = [row.geometry().GetEnvelope() for row in countries_3035_diss]
+coords = list(zip(*envelopes))
+minx, maxx = min(coords[0]), max(coords[1])
+miny, maxy = min(coords[2]), max(coords[3])
+
+
+# get area for each polygon, get length and number of roads per country
 area_roads_final = []
 for o in countries_3035_diss:
     country_roads = []
     geom_o = o.GetGeometryRef()
     name = o.GetField('state')
     area = geom_o.GetArea()
-    roads_3035.SetSpatialFilter(geom_o)
-    fc = roads_3035.GetFeatureCount()
-    road_feat = roads_3035.GetNextFeature()
+
+    roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
+    fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
+    road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
     while road_feat:
-        length = road_feat.GetField('LENGTH_KM')
-        country_roads.append(length)
+        length = road_feat.GetField('LENGTH_KM')        # get length of each road
+        country_roads.append(length)                    # store length value in list
         road_feat = roads_3035.GetNextFeature()
-    area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])
+    area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
     roads_3035.SetSpatialFilter(None)
 
 # loop through dams
@@ -191,9 +197,6 @@ df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
 ########################################################################################################################
 
-for sth in countries_3035_diss:
-    co_geom = sth.GetGeometryRef()
-    minx, maxx, miny, maxy = co_geom.GetExtent()
 
 ## 2. & 3. mean and maximum distance to road in km
 # calculate raster file with distances to roads for entire area
