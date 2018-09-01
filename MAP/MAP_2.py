@@ -68,20 +68,14 @@ coordTrans_roads = osr.CoordinateTransformation(source_SR, target_SR)
 co_shp = driver.Open(root_folder + '/countries_3035_diss.shp',1)
 countries_3035_diss = co_shp.GetLayer()
 
-envelopes = [row.geometry().GetEnvelope() for row in countries_3035_diss]
-coords = list(zip(*envelopes))
-minx, maxx = min(coords[0]), max(coords[1])
-miny, maxy = min(coords[2]), max(coords[3])
-
-
 # get area for each polygon, get length and number of roads per country
 area_roads_final = []
+counter = 0
 for o in countries_3035_diss:
     country_roads = []
     geom_o = o.GetGeometryRef()
     name = o.GetField('state')
     area = geom_o.GetArea()
-
     roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
     fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
     road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
@@ -91,6 +85,7 @@ for o in countries_3035_diss:
         road_feat = roads_3035.GetNextFeature()
     area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
     roads_3035.SetSpatialFilter(None)
+
 
 # loop through dams
 dam_feature = dams_lyr.GetNextFeature()
@@ -199,39 +194,39 @@ df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
 
 ## 2. & 3. mean and maximum distance to road in km
-# calculate raster file with distances to roads for entire area
-# countries_lyr.SetSpatialFilter(None)
-# countries_lyr.SetAttributeFilter(None)
-#
-# minx, maxx, miny, maxy = countries_3035.GetExtent()
-#
-# print('max x:', maxx, 'min x:', minx, 'max y:',maxy, 'min y:', miny)
-#
-# # define output raster col, row, cellsize
-# tif_driver = gdal.GetDriverByName('GTiff')
-# cellsize = 10
-#
-# cols = int((maxx - minx) / cellsize)
-# rows = int((maxy - miny) / cellsize)
-#
-# # create raster with roads
-# road_ds = tif_driver.Create(root_folder + 'roads.tif', cols, rows)
-# road_ds.SetProjection(roads_3035.GetSpatialRef().ExportToWkt())
-# road_ds.SetGeoTransform((minx, cellsize, 0, maxy, 0, -cellsize))
-# gdal.RasterizeLayer(road_ds, [1], roads_lyr, burn_values=[1], callback=gdal.TermProgress)
-#
-# # create proximity raster
+
+minx, maxx, miny, maxy = countries_3035.GetExtent()
+
+print('max x:', maxx, 'min x:', minx, 'max y:',maxy, 'min y:', miny)
+
+# define output raster col, row, cellsize
+tif_driver = gdal.GetDriverByName('GTiff')
+drvMemR = gdal.GetDriverByName('MEM')
+drvMemV = ogr.GetDriverByName('Memory')
+cellsize = 10
+out_ras = root_folder + 'sometif.tif'
+cols = int((maxx - minx) / cellsize)
+rows = int((maxy - miny) / cellsize)
+
+# create raster with roads
+road_ds = tif_driver.Create(out_ras, cols, rows) #1, gdal.GDT_Byte)
+print(road_ds)
+road_ds.SetGeoTransform((minx, cellsize, 0, maxy, 0, -cellsize))
+road_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
+gdal.RasterizeLayer(road_ds, [1], roads_lyr, burn_values=[1], callback=gdal.TermProgress)
+
+# create proximity raster
 # prox_ds = tif_driver.Create(root_folder + 'proximity_ras.tif', cols, rows)
 # print(prox_ds)
 # prox_ds.SetProjection(road_ds.GetProjection())
 # prox_ds.SetGeoTransform(road_ds.GetGeoTransform())
 # gdal.ComputeProximity(road_ds.GetRasterBand(1), prox_ds.GetRasterBand(1), ['DISTUNITS=GEO'],gdal.TermProgress)
-#
-# # write 2 raster files to disk
-# prox_ds.FlushCache()
-# road_ds.FlushCache()
-# road_ds = None
-# prox_ds = None
+
+# write 2 raster files to disk
+#prox_ds.FlushCache()
+#road_ds.FlushCache()
+#road_ds = None
+#prox_ds = None
 
 
 #####################################################################################
