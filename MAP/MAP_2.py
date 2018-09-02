@@ -54,6 +54,50 @@ coordTrans_roads = osr.CoordinateTransformation(source_SR, target_SR)
 co_shp = driver.Open(root_folder + '/countries_3035_diss.shp',1)
 countries_3035_diss = co_shp.GetLayer()
 
+
+
+
+
+
+cellsize = 10
+tif_driver = gdal.GetDriverByName('GTiff')
+o_feat = countries_3035_diss.GetNextFeature()
+while o_feat:
+#for o in countries_3035_diss:
+    x_min, x_max, y_min, y_max = o_feat.geometry().GetEnvelope()
+    roads_3035.SetSpatialFilterRect(x_min, y_min, x_max, y_max)
+    cols = int((x_max - x_min) / cellsize)
+    rows = int((y_max - y_min) / cellsize)
+    road_ds = tif_driver.Create(root_folder + 'road_ds.tif', cols, rows)
+    road_ds.SetProjection(roads_3035.GetSpatialRef().ExportToWkt())
+    road_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
+    gdal.RasterizeLayer(road_ds, [1], roads_3035, burn_values=[1],callback=gdal.TermProgress)
+    print('road rasters done')
+    prox_ds = tif_driver.Create(root_folder + 'proxi.tif', cols, rows, 1, gdal.GDT_Int32)
+    prox_ds.SetProjection(road_ds.GetProjection())
+    prox_ds.SetGeoTransform(road_ds.GetGeoTransform())
+    gdal.ComputeProximity(road_ds.GetRasterBand(1), prox_ds.GetRasterBand(1),['DISTUNITS=GEO'], gdal.TermProgress)
+
+    # copy feature of current country into new shapefile in memory
+    o_geom = o_feat.geometry()
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    data_source = driver.CreateDataSource('feature.shp')
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3035)
+    layer = data_source.CreateLayer("feature", srs, ogr.wkbPolygon)
+    poly1 = ogr.Geometry(ogr.wkbPolygon)
+    poly1.AddGeometry(o_geom)
+
+    #flush memory - very important
+    data_source.Destroy()
+
+    o_feat = countries_3035_diss.GetNextFeature()
+
+
+print('done')
+
+
+
 # get area for each polygon, get length and number of roads per country
 area_roads_final = []
 counter = 0
@@ -181,18 +225,40 @@ df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 ## 2. & 3. mean and maximum distance to road in km
 
 # define output raster col, row, cellsize
-x_min, x_max, y_min, y_max = countries_3035_diss.GetExtent()
-print(x_min, x_max, y_min, y_max)
+# x_min, x_max, y_min, y_max = countries_3035_diss.GetExtent()
+# print(x_min, x_max, y_min, y_max)
+#
+# cellsize = 30
+# tif_driver = gdal.GetDriverByName("GTiff")
+# cols = int((x_max - x_min) / cellsize)
+# rows = int((y_max - y_min) / cellsize)
+#
+# prox_ds = tif_driver.Create(root_folder + "prox_df.tif", cols, rows)
+# if prox_ds is None:
+#     raise ValueError("Can't create tif")
+#
+# prox_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
+# prox_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
 
-cellsize = 30
-tif_driver = gdal.GetDriverByName('GTiff')
-cols = int((x_max - x_min) / cellsize)
-rows = int((y_max - y_min) / cellsize)
 
-prox_ds = tif_driver.Create(root_folder + "prox_df.tif", cols, rows)
-print(prox_ds)
-prox_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
-prox_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
+
+
+
+
+    # country_roads = []
+    # geom_o = o.GetGeometryRef()
+    # name = o.GetField('state')
+    # area = geom_o.GetArea()
+    # roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
+    # fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
+    # road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
+    # while road_feat:
+    #     length = road_feat.GetField('LENGTH_KM')        # get length of each road
+    #     country_roads.append(length)                    # store length value in list
+    #     road_feat = roads_3035.GetNextFeature()
+    # area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
+    # roads_3035.SetSpatialFilter(None)
+
 
 
 # create raster with roads
