@@ -9,22 +9,8 @@ print("")
 # import additional packages
 from osgeo import gdal, ogr, osr
 import pandas as pd
-from shapely import wkt
-import numpy as np
-import math
-from joblib import Parallel, delayed
-import multiprocessing
-import os
-import glob
-import Package
-from Package import rastertools
-import random as rd
-import struct
-from pyproj import Proj, transform
 import geopandas as gpd
 from functools import reduce
-from decimal import Decimal
-import sys
 import os
 from Tools import dissolve_polygons
 #####################################################################################
@@ -192,28 +178,29 @@ df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
 ########################################################################################################################
 
-
 ## 2. & 3. mean and maximum distance to road in km
 
-minx, maxx, miny, maxy = countries_3035.GetExtent()
-
-print('max x:', maxx, 'min x:', minx, 'max y:',maxy, 'min y:', miny)
-
 # define output raster col, row, cellsize
+x_min, x_max, y_min, y_max = countries_3035_diss.GetExtent()
+print(x_min, x_max, y_min, y_max)
+
+cellsize = 30
 tif_driver = gdal.GetDriverByName('GTiff')
-drvMemR = gdal.GetDriverByName('MEM')
-drvMemV = ogr.GetDriverByName('Memory')
-cellsize = 10
-out_ras = root_folder + 'sometif.tif'
-cols = int((maxx - minx) / cellsize)
-rows = int((maxy - miny) / cellsize)
+cols = int((x_max - x_min) / cellsize)
+rows = int((y_max - y_min) / cellsize)
+
+prox_ds = tif_driver.Create(root_folder + "prox_df.tif", cols, rows)
+print(prox_ds)
+prox_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
+prox_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
+
 
 # create raster with roads
-road_ds = tif_driver.Create(out_ras, cols, rows) #1, gdal.GDT_Byte)
-print(road_ds)
-road_ds.SetGeoTransform((minx, cellsize, 0, maxy, 0, -cellsize))
-road_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
-gdal.RasterizeLayer(road_ds, [1], roads_lyr, burn_values=[1], callback=gdal.TermProgress)
+# road_ds = tif_driver.Create(out_ras, cols, rows) #1, gdal.GDT_Byte)
+# print(road_ds)
+# road_ds.SetGeoTransform((minx, cellsize, 0, maxy, 0, -cellsize))
+# road_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
+# gdal.RasterizeLayer(road_ds, [1], roads_lyr, burn_values=[1], callback=gdal.TermProgress)
 
 # create proximity raster
 # prox_ds = tif_driver.Create(root_folder + 'proximity_ras.tif', cols, rows)
