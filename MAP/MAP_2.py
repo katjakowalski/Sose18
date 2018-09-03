@@ -5,18 +5,26 @@ print("Starting process, date and time: " + starttime)
 print("--------------------------------------------------------")
 print("")
 
-#####################################################################################
-# import additional packages
+########################################################################################################################
+# import packages
 from osgeo import gdal, ogr, osr
 import pandas as pd
 import geopandas as gpd
 from functools import reduce
 import os
+import shutil
 from Tools import dissolve_polygons
-#####################################################################################
+########################################################################################################################
 
+os.chdir("/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task02_data/")
 root_folder = "/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task02_data/"
 
+# create folder to store data temporarily
+store_folder = "/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task02_data/temp/"
+if not os.path.exists(store_folder):
+    os.makedirs(store_folder)
+
+# open original shapefiles
 driver = ogr.GetDriverByName("ESRI Shapefile")
 country_shp = driver.Open(root_folder + '/ZonalShape_Countries_Europe_NUTS1_multipart.shp', 1)
 dam_shp = driver.Open(root_folder + '/GRanD_dams_v1_1_Europe-sub.shp',1)
@@ -26,22 +34,24 @@ countries_lyr = country_shp.GetLayer()
 roads_lyr = road_shp.GetLayer()
 dams_lyr = dam_shp.GetLayer()
 
-# reproject roads and country shapefiles to epsg 3035 (Lambert Equal Area) to work with spatial resolution in m
-driver = ogr.GetDriverByName("ESRI Shapefile")
-# tmp = gpd.GeoDataFrame.from_file(root_folder + '/gRoads-v1-Europe-sub.shp')
-# roads_3035 = tmp.to_crs({'init':'EPSG:3035'})
-# roads_3035.to_file(root_folder + 'roads_3035.shp')
-ro = driver.Open(root_folder + '/roads_3035.shp',0)
+# get memory driver for raster and shapefile data
+tif_driver = gdal.GetDriverByName('MEM')
+shp_driver = ogr.GetDriverByName('Memory')
+
+# reprojects road and country shapefiles to epsg 3035 (Lambert Equal Area) to work with spatial resolution in m
+tmp = gpd.GeoDataFrame.from_file(root_folder + '/gRoads-v1-Europe-sub.shp')
+roads_3035 = tmp.to_crs({'init':'EPSG:3035'})
+roads_3035.to_file(store_folder + 'roads_3035.shp')
+ro = driver.Open(store_folder + '/roads_3035.shp',0)
 roads_3035 = ro.GetLayer()
 
-# tmp = gpd.GeoDataFrame.from_file(root_folder + '/ZonalShape_Countries_Europe_NUTS1_multipart.shp')
-# countries_3035 = tmp.to_crs({'init':'EPSG:3035'})
-# countries_3035.to_file(root_folder + 'countries_3035.shp')
-# driver = ogr.GetDriverByName("ESRI Shapefile")
-co = driver.Open(root_folder + '/countries_3035.shp',0)
+tmp = gpd.GeoDataFrame.from_file(root_folder + '/ZonalShape_Countries_Europe_NUTS1_multipart.shp')
+countries_3035 = tmp.to_crs({'init':'EPSG:3035'})
+countries_3035.to_file(store_folder + 'countries_3035.shp')
+co = driver.Open(store_folder + '/countries_3035.shp',0)
 countries_3035 = co.GetLayer()
 
-# coordinate transformation
+# coordinate transformations
 source_SR = dams_lyr.GetSpatialRef()
 target_SR = countries_lyr.GetSpatialRef()
 coordTrans= osr.CoordinateTransformation(source_SR, target_SR)
@@ -50,55 +60,81 @@ source_SR = countries_lyr.GetSpatialRef()
 target_SR = roads_lyr.GetSpatialRef()
 coordTrans_roads = osr.CoordinateTransformation(source_SR, target_SR)
 
-#dissolve_polygons(root_folder, '/countries_3035.shp', '/countries_3035_diss.shp')
-co_shp = driver.Open(root_folder + '/countries_3035_diss.shp',1)
+# dissolves country polygons based on name:
+dissolve_polygons(store_folder, '/countries_3035.shp', '/countries_3035_diss.shp')
+co_shp = driver.Open(store_folder + '/countries_3035_diss.shp',1)
 countries_3035_diss = co_shp.GetLayer()
 
+# Following code block:
+# - creates 3 rasters for each country (rasterized roads, proximity raster for roads, raster with country extent)
+# - creates 1 shapefile which contains the respective country
+# - calculates statistics for each country based on proximity raster
 
-
-
-
-
-cellsize = 10
-tif_driver = gdal.GetDriverByName('GTiff')
+cellsize = 100                                          # defines cellsize for all rasters
+roads_list = []                                         # list to store max and mean distance to road for each country
 o_feat = countries_3035_diss.GetNextFeature()
 while o_feat:
-#for o in countries_3035_diss:
-    x_min, x_max, y_min, y_max = o_feat.geometry().GetEnvelope()
-    roads_3035.SetSpatialFilterRect(x_min, y_min, x_max, y_max)
-    cols = int((x_max - x_min) / cellsize)
+    x_min, x_max, y_min, y_max = o_feat.geometry().GetEnvelope()    # gets bounding coordinates of country
+    name = o_feat.GetField('state')
+
+    roads_3035.SetSpatialFilterRect(x_min, y_min, x_max, y_max)     # sets spatial filter on road layer
+    cols = int((x_max - x_min) / cellsize)                          # calculates number of columns and rows to create new raster
     rows = int((y_max - y_min) / cellsize)
-    road_ds = tif_driver.Create(root_folder + 'road_ds.tif', cols, rows)
-    road_ds.SetProjection(roads_3035.GetSpatialRef().ExportToWkt())
-    road_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
-    gdal.RasterizeLayer(road_ds, [1], roads_3035, burn_values=[1],callback=gdal.TermProgress)
+
+    # creates raster of road shapefile
+    road_ds = tif_driver.Create(root_folder + 'road_ds.tif', cols, rows)  # creates new empty raster with col, row specifications
+    road_ds.SetProjection(roads_3035.GetSpatialRef().ExportToWkt())       # assigns projection of road shapefile
+    road_ds.SetGeoTransform((x_min, cellsize, 0, y_max, 0, -cellsize))    # assigns new geotransform
+    gdal.RasterizeLayer(road_ds, [1], roads_3035, burn_values=[1],
+                        callback=gdal.TermProgress)                       # rasterizes vector data, cells of roads have value 1
     print('road rasters done')
+
+    # creates proximity raster
     prox_ds = tif_driver.Create(root_folder + 'proxi.tif', cols, rows, 1, gdal.GDT_Int32)
     prox_ds.SetProjection(road_ds.GetProjection())
     prox_ds.SetGeoTransform(road_ds.GetGeoTransform())
-    gdal.ComputeProximity(road_ds.GetRasterBand(1), prox_ds.GetRasterBand(1),['DISTUNITS=GEO'], gdal.TermProgress)
+    gdal.ComputeProximity(road_ds.GetRasterBand(1),                       # calculates proximity to road for each raster cell
+                          prox_ds.GetRasterBand(1),
+                          ['DISTUNITS=GEO'], gdal.TermProgress)
 
-    # copy feature of current country into new shapefile in memory
+    print('proximity raster done')
+
+    # create new shapefile
     o_geom = o_feat.geometry()
-    driver = ogr.GetDriverByName('ESRI Shapefile')
-    data_source = driver.CreateDataSource('feature.shp')
+    data_source = shp_driver.CreateDataSource(root_folder + 'feature.shp')
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(3035)
     layer = data_source.CreateLayer("feature", srs, ogr.wkbPolygon)
-    poly1 = ogr.Geometry(ogr.wkbPolygon)
-    poly1.AddGeometry(o_geom)
+    defn = layer.GetLayerDefn()
+    # store one feature (=country) in new shapefile
+    feat = ogr.Feature(defn)
+    feat.SetGeometry(o_geom)
+    layer.CreateFeature(feat)
+    print(layer.GetFeatureCount())
 
-    #flush memory - very important
-    data_source.Destroy()
+    # creates raster of current country to later compute statistics inside country boundary
+    co_ds = tif_driver.Create(root_folder + 'tmp.tif', cols, rows)
+    co_ds.SetProjection(prox_ds.GetProjection())
+    co_ds.SetGeoTransform(prox_ds.GetGeoTransform())
+    gdal.RasterizeLayer(co_ds, [1], layer, burn_values=[1],callback=gdal.TermProgress)
+    print('country raster done')
 
+    co_data = co_ds.ReadAsArray()                       # reads rasters as array:
+    prox_data = prox_ds.ReadAsArray()
+    prox_data[co_data == 0] = -99                       # assign no data values outside country boundary
+    prox_ds.GetRasterBand(1).WriteArray(prox_data)      # write array back to raster
+    prox_ds.GetRasterBand(1).SetNoDataValue(-99)        # declares no data value
+    # calculates statistics of raster (minimum, maximum, mean, st.dev):
+    stats = prox_ds.GetRasterBand(1).ComputeStatistics(False, gdal.TermProgress)
+    roads_list.append([name, round((stats[1]/1000), 2), round((stats[2]/1000), 2)])       # store data in list
+
+    del feat
+    roads_3035.SetSpatialFilter(None)
     o_feat = countries_3035_diss.GetNextFeature()
 
 
-print('done')
-
-
-
-# get area for each polygon, get length and number of roads per country
+# following code block:
+# - gets area for each country, gets length and number of roads per country
 area_roads_final = []
 counter = 0
 for o in countries_3035_diss:
@@ -116,8 +152,18 @@ for o in countries_3035_diss:
     area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
     roads_3035.SetSpatialFilter(None)
 
+# delete temporary folder with files from disk
+try:
+    shutil.rmtree(store_folder)
+except OSError as e:
+    print ("Error: %s - %s." % (e.filename, e.strerror))
+print('removed')
 
-# loop through dams
+# I did not use the reprojected files in the following code because it is not necessary
+# (direct coordinate transformation is possible)
+
+# next block of code:
+# - loops through dam shapefile and stores necessary information
 dam_feature = dams_lyr.GetNextFeature()
 df = []
 while dam_feature:
@@ -141,8 +187,8 @@ while dam_feature:
     dam_feature = dams_lyr.GetNextFeature()
 dams_lyr.ResetReading()
 
-
-########################################################################################################################
+# following code:
+# - summarizes data according to task and writes it to csv file
 
 field_names = list(('name', 'year',  'area_skm', 'depth_m', 'elev_masl', 'catch_skm', 'country'))
 df_pandas = pd.DataFrame.from_records(df, columns = field_names)
@@ -150,6 +196,9 @@ df_pandas = pd.DataFrame.from_records(df, columns = field_names)
 # group dataframe and extract information
 ## area of the country in km2 //  Kilometers of road per country // Number of roads
 area_km2 = pd.DataFrame.from_records(area_roads_final, columns= ['country','area_km2', 'nr_roads', 'roads_km'])
+
+## mean and maximum distance to roads per country
+road_dist = pd.DataFrame.from_records(roads_list, columns= ['country','max_road_dist', 'road_dist_km'])
 
 ## 1. number of damns per country
 nr_dams = df_pandas.groupby(['country'], as_index=False)['country'].agg(['count'])
@@ -210,8 +259,10 @@ df_final.columns = ['country','nr_dams','yr_old','name_old','yr_young','name_you
                     'av_reserv_km2','max_reserv_km2','Name_max_depth','av_depth_reserv_m',
                     'max_depth_reserv_m','Name_max_reserv','max_catch_km2','Name_max_catch' ]
 
-# merge with country area, use outer join to keep all rows (i.e. countries without dams)
+# merge with dataframes containing country area, distance values
+# use outer join to keep all rows (i.e. countries without dams)
 df_final = df_final.merge(area_km2, how='outer', on='country')
+df_final = df_final.merge(road_dist, how = 'outer', on='country')
 
 # some dams where built in the same year, however, here I just select the first in alphabetical order and drop the other(s)
 df_final.sort_values(by=['country', 'name_old', 'name_young', 'Name_max_depth', 'Name_max_reserv', 'Name_max_catch'])
@@ -220,70 +271,9 @@ df_final = df_final.drop_duplicates(subset=['country'], keep = 'first')
 # save csv file
 df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
 
+
 ########################################################################################################################
-
-## 2. & 3. mean and maximum distance to road in km
-
-# define output raster col, row, cellsize
-# x_min, x_max, y_min, y_max = countries_3035_diss.GetExtent()
-# print(x_min, x_max, y_min, y_max)
-#
-# cellsize = 30
-# tif_driver = gdal.GetDriverByName("GTiff")
-# cols = int((x_max - x_min) / cellsize)
-# rows = int((y_max - y_min) / cellsize)
-#
-# prox_ds = tif_driver.Create(root_folder + "prox_df.tif", cols, rows)
-# if prox_ds is None:
-#     raise ValueError("Can't create tif")
-#
-# prox_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
-# prox_ds.SetGeoTransform((x_min, cellsize, 0, x_max, 0, -cellsize))
-
-
-
-
-
-
-    # country_roads = []
-    # geom_o = o.GetGeometryRef()
-    # name = o.GetField('state')
-    # area = geom_o.GetArea()
-    # roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
-    # fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
-    # road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
-    # while road_feat:
-    #     length = road_feat.GetField('LENGTH_KM')        # get length of each road
-    #     country_roads.append(length)                    # store length value in list
-    #     road_feat = roads_3035.GetNextFeature()
-    # area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
-    # roads_3035.SetSpatialFilter(None)
-
-
-
-# create raster with roads
-# road_ds = tif_driver.Create(out_ras, cols, rows) #1, gdal.GDT_Byte)
-# print(road_ds)
-# road_ds.SetGeoTransform((minx, cellsize, 0, maxy, 0, -cellsize))
-# road_ds.SetProjection(countries_3035_diss.GetSpatialRef().ExportToWkt())
-# gdal.RasterizeLayer(road_ds, [1], roads_lyr, burn_values=[1], callback=gdal.TermProgress)
-
-# create proximity raster
-# prox_ds = tif_driver.Create(root_folder + 'proximity_ras.tif', cols, rows)
-# print(prox_ds)
-# prox_ds.SetProjection(road_ds.GetProjection())
-# prox_ds.SetGeoTransform(road_ds.GetGeoTransform())
-# gdal.ComputeProximity(road_ds.GetRasterBand(1), prox_ds.GetRasterBand(1), ['DISTUNITS=GEO'],gdal.TermProgress)
-
-# write 2 raster files to disk
-#prox_ds.FlushCache()
-#road_ds.FlushCache()
-#road_ds = None
-#prox_ds = None
-
-
-#####################################################################################
-# set ending time ###################################################################
+# set ending time ######################################################################################################
 print("")
 endtime = time.strftime("%H:%M:%S", time.localtime())
 print("--------------------------------------------------------")
