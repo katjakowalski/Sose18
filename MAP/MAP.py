@@ -14,6 +14,9 @@ import struct
 from Tools import list_files, corner_coordinates, return_raster_values
 # Tools on github: https://github.com/katjakowalski/Sose18/tree/SoSe18/Tools
 import os
+
+# please note that the code works with the original data in folders and there might be errors when other data are added
+# (e.g. sometimes automatically when opening an image with GIS software)
 ########################################################################################################################
 # I did not include this function in the tools package since it is not generalized
 def fill_shapefile(x, y):
