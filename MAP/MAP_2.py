@@ -14,6 +14,7 @@ from functools import reduce
 import os
 import shutil
 from Tools import dissolve_polygons
+# Tools on github: https://github.com/katjakowalski/Sose18/tree/SoSe18/Tools
 ########################################################################################################################
 
 os.chdir("/Users/Katja/Documents/Studium/Sose18/MAP/Geoprocessing-in-python_MAP2018_data/Task02_data/")
@@ -65,17 +66,40 @@ dissolve_polygons(store_folder, '/countries_3035.shp', '/countries_3035_diss.shp
 co_shp = driver.Open(store_folder + '/countries_3035_diss.shp',1)
 countries_3035_diss = co_shp.GetLayer()
 
+# following code block:
+# - gets area for each country, gets length and number of roads per country
+area_roads_final = []
+
+country_feat = countries_3035_diss.GetNextFeature()
+while country_feat:
+    country_roads = []
+    geom_o = country_feat.GetGeometryRef()
+    name = country_feat.GetField('name')
+    area = geom_o.GetArea()
+    roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
+    fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
+    road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
+    while road_feat:
+        length = road_feat.GetField('LENGTH_KM')        # get length of each road
+        country_roads.append(length)                    # store length value in list
+        road_feat = roads_3035.GetNextFeature()
+    area_roads_final.append([name, round((area/1000000), 2), fc, round(sum(country_roads), 2)])  # convert area to km2, store number of roads and length for each country
+    roads_3035.SetSpatialFilter(None)
+    roads_3035.ResetReading()
+    country_feat = countries_3035_diss.GetNextFeature()
+countries_3035_diss.ResetReading()
+
 # Following code block:
 # - creates 3 rasters for each country (rasterized roads, proximity raster for roads, raster with country extent)
 # - creates 1 shapefile which contains the respective country
 # - calculates statistics for each country based on proximity raster
 
-cellsize = 100                                          # defines cellsize for all rasters
+cellsize = 100                                          # I defined this value for cell size because final unit is km
 roads_list = []                                         # list to store max and mean distance to road for each country
 o_feat = countries_3035_diss.GetNextFeature()
 while o_feat:
     x_min, x_max, y_min, y_max = o_feat.geometry().GetEnvelope()    # gets bounding coordinates of country
-    name = o_feat.GetField('state')
+    name = o_feat.GetField('name')
 
     roads_3035.SetSpatialFilterRect(x_min, y_min, x_max, y_max)     # sets spatial filter on road layer
     cols = int((x_max - x_min) / cellsize)                          # calculates number of columns and rows to create new raster
@@ -87,7 +111,6 @@ while o_feat:
     road_ds.SetGeoTransform((x_min, cellsize, 0, y_max, 0, -cellsize))    # assigns new geotransform
     gdal.RasterizeLayer(road_ds, [1], roads_3035, burn_values=[1],
                         callback=gdal.TermProgress)                       # rasterizes vector data, cells of roads have value 1
-    print('road rasters done')
 
     # creates proximity raster
     prox_ds = tif_driver.Create(root_folder + 'proxi.tif', cols, rows, 1, gdal.GDT_Int32)
@@ -96,8 +119,6 @@ while o_feat:
     gdal.ComputeProximity(road_ds.GetRasterBand(1),                       # calculates proximity to road for each raster cell
                           prox_ds.GetRasterBand(1),
                           ['DISTUNITS=GEO'], gdal.TermProgress)
-
-    print('proximity raster done')
 
     # create new shapefile
     o_geom = o_feat.geometry()
@@ -110,14 +131,12 @@ while o_feat:
     feat = ogr.Feature(defn)
     feat.SetGeometry(o_geom)
     layer.CreateFeature(feat)
-    print(layer.GetFeatureCount())
 
     # creates raster of current country to later compute statistics inside country boundary
     co_ds = tif_driver.Create(root_folder + 'tmp.tif', cols, rows)
     co_ds.SetProjection(prox_ds.GetProjection())
     co_ds.SetGeoTransform(prox_ds.GetGeoTransform())
     gdal.RasterizeLayer(co_ds, [1], layer, burn_values=[1],callback=gdal.TermProgress)
-    print('country raster done')
 
     co_data = co_ds.ReadAsArray()                       # reads rasters as array:
     prox_data = prox_ds.ReadAsArray()
@@ -131,33 +150,8 @@ while o_feat:
     del feat
     roads_3035.SetSpatialFilter(None)
     o_feat = countries_3035_diss.GetNextFeature()
-
-
-# following code block:
-# - gets area for each country, gets length and number of roads per country
-area_roads_final = []
-counter = 0
-for o in countries_3035_diss:
-    country_roads = []
-    geom_o = o.GetGeometryRef()
-    name = o.GetField('state')
-    area = geom_o.GetArea()
-    roads_3035.SetSpatialFilter(geom_o)                 # set spatial filter on roads layer
-    fc = roads_3035.GetFeatureCount()                   # get feature count of filtered layer
-    road_feat = roads_3035.GetNextFeature()             # loop through filtered geometries
-    while road_feat:
-        length = road_feat.GetField('LENGTH_KM')        # get length of each road
-        country_roads.append(length)                    # store length value in list
-        road_feat = roads_3035.GetNextFeature()
-    area_roads_final.append([name, round((area/1000000), 2), fc, sum(country_roads)])  # convert area to km2, store number of roads and length for each country
-    roads_3035.SetSpatialFilter(None)
-
-# delete temporary folder with files from disk
-try:
-    shutil.rmtree(store_folder)
-except OSError as e:
-    print ("Error: %s - %s." % (e.filename, e.strerror))
-print('removed')
+countries_3035_diss.ResetReading()
+roads_3035.ResetReading()
 
 # I did not use the reprojected files in the following code because it is not necessary
 # (direct coordinate transformation is possible)
@@ -186,6 +180,7 @@ while dam_feature:
     countries_lyr.SetSpatialFilter(None)                # remove spatial filter
     dam_feature = dams_lyr.GetNextFeature()
 dams_lyr.ResetReading()
+countries_lyr.ResetReading()
 
 # following code:
 # - summarizes data according to task and writes it to csv file
@@ -195,7 +190,8 @@ df_pandas = pd.DataFrame.from_records(df, columns = field_names)
 
 # group dataframe and extract information
 ## area of the country in km2 //  Kilometers of road per country // Number of roads
-area_km2 = pd.DataFrame.from_records(area_roads_final, columns= ['country','area_km2', 'nr_roads', 'roads_km'])
+heads = list(('country', 'area_km2', 'nr_roads','roads_km'))
+area_km2 = pd.DataFrame.from_records(area_roads_final, columns= heads)
 
 ## mean and maximum distance to roads per country
 road_dist = pd.DataFrame.from_records(roads_list, columns= ['country','max_road_dist', 'road_dist_km'])
@@ -269,7 +265,14 @@ df_final.sort_values(by=['country', 'name_old', 'name_young', 'Name_max_depth', 
 df_final = df_final.drop_duplicates(subset=['country'], keep = 'first')
 
 # save csv file
-df_final.to_csv(path_or_buf= 'Map2.csv', index=False)
+df_final.to_csv(path_or_buf= 'Kowalski_Katja_MAP- task02_dataset.csv', index=False)
+
+# delete temporary folder with files from disk
+try:
+    shutil.rmtree(store_folder)
+except OSError as e:
+    print ("Error: %s - %s." % (e.filename, e.strerror))
+print('removed')
 
 
 ########################################################################################################################
